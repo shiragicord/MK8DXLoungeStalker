@@ -54,6 +54,12 @@ class MK8DXLoungePlayerDetails:
             return int(peak_mmr_element.find_next_sibling("dd").text)
         raise ValueError("Peak MMR not found")
     
+    def get_mmr(self):
+        mmr_element = self.soup.find("dt", string="MMR")
+        if mmr_element:
+            return int(mmr_element.find_next_sibling("dd").text)
+        raise ValueError("MMR not found")
+    
     def get_last_online_time(self):
         last_joined_event = self.get_last_joined_event()
         return last_joined_event.time
@@ -73,6 +79,6 @@ while True:
     fefe.update()
     new_last_online_time = fefe.get_last_online_time()
     if new_last_online_time != last_online_time:
-        post_discord_message(f"{fefe.get_player_name()} went online at {new_last_online_time}")
+        post_discord_message(f"{fefe.get_player_name()} ({fefe.get_division()} MMR:{fefe.get_mmr()}) went online at {new_last_online_time}")
         last_online_time = new_last_online_time
     time.sleep(60)
