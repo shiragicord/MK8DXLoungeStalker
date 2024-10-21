@@ -1,7 +1,7 @@
 from bs4 import BeautifulSoup
 import requests
 import re
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import time
 
 class MK8DXLoungeEvent:
@@ -60,25 +60,29 @@ class MK8DXLoungePlayerDetails:
             return int(mmr_element.find_next_sibling("dd").text)
         raise ValueError("MMR not found")
     
-    def get_last_online_time(self):
+    def get_last_online_time(self, timezone=timezone.utc):
         last_joined_event = self.get_last_joined_event()
-        return last_joined_event.time
+        last_online_time = last_joined_event.time
+        return last_online_time.astimezone(timezone)
 
 LOUNGE_ID = 58599
 SEASON = 12
 DISCORD_WEBHOOK_URL = "your_webhook_url_here"
 
-fefe = MK8DXLoungePlayerDetails(LOUNGE_ID, SEASON)
-
 def post_discord_message(content):
     requests.post(DISCORD_WEBHOOK_URL, json={"content": content})
 
-last_online_time = None
+def main():
+    fefe = MK8DXLoungePlayerDetails(LOUNGE_ID, SEASON)
+    last_online_time = None
 
-while True:
-    fefe.update()
-    new_last_online_time = fefe.get_last_online_time()
-    if new_last_online_time != last_online_time:
-        post_discord_message(f"{fefe.get_player_name()} ({fefe.get_division()} MMR:{fefe.get_mmr()}) went online at {new_last_online_time}")
-        last_online_time = new_last_online_time
-    time.sleep(60)
+    while True:
+        fefe.update()
+        new_last_online_time = fefe.get_last_online_time(timezone=timezone(timedelta(hours=9)))
+        if new_last_online_time != last_online_time:
+            post_discord_message(f"{fefe.get_player_name()} ({fefe.get_division()} MMR:{fefe.get_mmr()}) went online at {new_last_online_time}")
+            last_online_time = new_last_online_time
+        time.sleep(60)
+
+if __name__ == "__main__":
+    main()
