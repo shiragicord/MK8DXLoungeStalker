@@ -1,87 +1,57 @@
-from bs4 import BeautifulSoup
-import requests
-import re
-from datetime import datetime, timezone, timedelta
+from mk8dxlounge import MK8DXLoungePlayerDetails
+from datetime import datetime, timedelta, timezone
 import time
-
-class MK8DXLoungeEvent:
-    def __init__(self):
-        self.name = ""
-        self.id = 0
-        self.time: datetime = None
-        self.mmr_delta = 0
-        self.mmr = 0
-    
-    def parse_html_table_row(row: BeautifulSoup):
-        obj = MK8DXLoungeEvent()
-        cells = row.find_all("td")
-        name_raw = cells[0].text.strip()
-        obj.name = re.sub(r" \(ID: [0-9]+\)$", "", name_raw)
-        obj.id = int(re.sub(r"^/TableDetails/", "", cells[0].find("a")["href"]))
-
-        datetime_text = cells[1].find("span")["data-time"].replace("Z", "+00:00")
-        obj.time = datetime.fromisoformat(datetime_text)
-        obj.mmr_delta = int(cells[2].text)
-        obj.mmr = int(cells[3].text)
-        return obj
-
-class MK8DXLoungePlayerDetails:
-    def __init__(self, lounge_id, season):
-        self.lounge_id = lounge_id
-        self.season = season
-        self.url = f"https://www.mk8dx-lounge.com/PlayerDetails/{lounge_id}?season={season}"
-        self.update()
-
-    def update(self):
-        self.soup = BeautifulSoup(requests.get(self.url).content, "html.parser")
-
-    def get_player_name(self):
-        h1_text = self.soup.find("h1").text
-        return re.sub(r" - [A-Z][a-z]+ [0-9] $", "", h1_text)
-    
-    def get_division(self):
-        h1_text = self.soup.find("h1").text
-        return re.sub(r"^.* - ", "", h1_text)
-    
-    def get_last_joined_event(self) -> MK8DXLoungeEvent:
-        table = self.soup.find("table")
-        rows = table.find_all("tr")
-        return MK8DXLoungeEvent.parse_html_table_row(rows[1])
-    
-    def get_peak_mmr(self):
-        peak_mmr_element = self.soup.find("dt", string="Peak MMR")
-        if peak_mmr_element:
-            return int(peak_mmr_element.find_next_sibling("dd").text)
-        raise ValueError("Peak MMR not found")
-    
-    def get_mmr(self):
-        mmr_element = self.soup.find("dt", string="MMR")
-        if mmr_element:
-            return int(mmr_element.find_next_sibling("dd").text)
-        raise ValueError("MMR not found")
-    
-    def get_last_online_time(self, timezone=timezone.utc):
-        last_joined_event = self.get_last_joined_event()
-        last_online_time = last_joined_event.time
-        return last_online_time.astimezone(timezone)
+import requests
 
 LOUNGE_ID = 58599
-SEASON = 12
 DISCORD_WEBHOOK_URL = "your_webhook_url_here"
 
-def post_discord_message(content):
-    requests.post(DISCORD_WEBHOOK_URL, json={"content": content})
+def post_discord_embed(text_content, title, url, timestamp: datetime, color, inline_fields: dict):
+    fields = []
+    for key, value in inline_fields.items():
+        fields.append({"name": key, "value": value, "inline": True})
+
+    requests.post(DISCORD_WEBHOOK_URL,
+                    json={
+                            "content": text_content,
+                            "embeds": 
+                                [
+                                    {
+                                        "title": title, 
+                                        "url": url, 
+                                        "timestamp": timestamp.isoformat(), 
+                                        "color": color, 
+                                        "fields": fields
+                                    }
+                                ]
+                        })
 
 def main():
-    fefe = MK8DXLoungePlayerDetails(LOUNGE_ID, SEASON)
-    last_online_time = None
+    player = MK8DXLoungePlayerDetails(LOUNGE_ID)
+    previous_mmr = None
+    previous_last_online_time = None
 
     while True:
-        fefe.update()
-        new_last_online_time = fefe.get_last_online_time(timezone=timezone(timedelta(hours=9)))
-        if new_last_online_time != last_online_time:
-            post_discord_message(f"{fefe.get_player_name()} ({fefe.get_division()} MMR:{fefe.get_mmr()}) went online at {new_last_online_time}")
-            last_online_time = new_last_online_time
+        player.update()
+        new_mmr = player.get_mmr()
+        new_last_online_time = player.get_last_online_time(timezone=timezone(timedelta(hours=9)))
+
+        if new_mmr != previous_mmr \
+            or new_last_online_time != previous_last_online_time:
+            previous_mmr = new_mmr
+            previous_last_online_time = new_last_online_time
+            post_discord_embed(
+                                f"{player.get_player_name()} ({player.get_division()} MMR:{player.get_mmr()}) went online at {new_last_online_time}",
+                                f"{player.get_player_name()} - {player.get_division()}", 
+                                player.url, 
+                                new_last_online_time, 
+                                0x00ff00, 
+                                {
+                                    "MMR": new_mmr, 
+                                    "Peak MMR": player.get_peak_mmr()
+                                }
+                            )
+
         time.sleep(60)
 
 if __name__ == "__main__":
