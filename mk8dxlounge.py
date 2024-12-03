@@ -54,13 +54,13 @@ class MK8DXLoungePlayerDetails:
         peak_mmr_element = self.soup.find("dt", string="Peak MMR")
         if peak_mmr_element:
             return int(peak_mmr_element.find_next_sibling("dd").text)
-        raise ValueError("Peak MMR not found")
+        raise RuntimeError("Peak MMR not found")
     
     def get_mmr(self):
         mmr_element = self.soup.find("dt", string="MMR")
         if mmr_element:
             return int(mmr_element.find_next_sibling("dd").text)
-        raise ValueError("MMR not found")
+        raise RuntimeError("MMR not found")
     
     def get_last_online_time(self, timezone=timezone.utc):
         last_joined_event = self.get_last_joined_event()
